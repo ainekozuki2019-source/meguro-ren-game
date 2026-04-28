@@ -1,0 +1,93 @@
+// （中略：HTML/CSS部分は前回のものを引き継いでください。scriptタグ内を以下に差し替え）
+
+    const API_URL = https://script.google.com/macros/s/AKfycbySY0Te0BkfNC0ak-sneCwwrm4DJmBHZjAGFcMOzRwnb7v68Syuzmwpd1indUIfASYu8w/exec;
+    let quizData = [];
+    let currentQuiz = null;
+
+    async function init() {
+        try {
+            const response = await fetch(API_URL);
+            quizData = await response.json();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('target-image').style.display = 'inline-block';
+            nextQuestion();
+        } catch (e) {
+            document.getElementById('loading').innerText = "エラー: 読み込み失敗";
+        }
+    }
+
+    function nextQuestion() {
+        document.getElementById('result').innerText = "";
+        document.getElementById('answer-name').innerText = "";
+        document.getElementById('next-btn').style.display = "none";
+        document.getElementById('choices').innerHTML = "";
+
+        // 出題
+        currentQuiz = quizData[Math.floor(Math.random() * quizData.length)];
+        document.getElementById('target-image').src = currentQuiz.image_url;
+
+        // 正解候補リスト（本名 + 別名）
+        const allCorrectAnswers = [currentQuiz.name, ...currentQuiz.aliases];
+
+        // 選択肢作成 (6～8択)
+        const choiceCount = Math.floor(Math.random() * 3) + 6; 
+        let displayChoices = [];
+
+        // 1. まず本物の正解を1つ入れる
+        displayChoices.push({ text: currentQuiz.name, isCorrect: true, isImage: false });
+
+        // 2. 正解の「別名」があれば、ランダムで1〜2個混ぜる（気持ち悪さ演出）
+        if (currentQuiz.aliases.length > 0) {
+            const extraCorrect = currentQuiz.aliases.sort(() => Math.random() - 0.5).slice(0, 2);
+            extraCorrect.forEach(a => displayChoices.push({ text: a, isCorrect: true, isImage: false }));
+        }
+
+        // 3. 残りの枠を他人の名前で埋める
+        let others = quizData.filter(d => d.name !== currentQuiz.name);
+        others.sort(() => Math.random() - 0.5);
+        while (displayChoices.length < choiceCount) {
+            let fake = others.pop();
+            if(!fake) break;
+            displayChoices.push({ text: fake.name, isCorrect: false, isImage: false, trapUrl: fake.image_url });
+        }
+
+        // 4. 1つだけランダムに「画像トラップ」に変身させる
+        const trapIndex = Math.floor(Math.random() * displayChoices.length);
+        if (Math.random() > 0.3) {
+            displayChoices[trapIndex].isImage = true;
+            // トラップが「正解」だった場合は自分の画像を、そうでなければ他人の画像を使う
+            displayChoices[trapIndex].imageUrl = displayChoices[trapIndex].isCorrect ? currentQuiz.image_url : displayChoices[trapIndex].trapUrl;
+        }
+
+        // 順序をシャッフル
+        displayChoices.sort(() => Math.random() - 0.5);
+
+        // 描画
+        displayChoices.forEach(c => {
+            const el = document.createElement('div');
+            if (c.isImage) {
+                const img = document.createElement('img');
+                img.src = c.imageUrl;
+                img.className = "choice-img-trap";
+                img.onclick = () => checkAnswer(c.isCorrect);
+                el.appendChild(img);
+            } else {
+                const span = document.createElement('span');
+                span.innerText = c.text;
+                span.className = "choice-link";
+                span.onclick = () => checkAnswer(c.isCorrect);
+                el.appendChild(span);
+            }
+            document.getElementById('choices').appendChild(el);
+        });
+    }
+
+    function checkAnswer(isCorrect) {
+        if (document.getElementById('next-btn').style.display === "block") return;
+        document.getElementById('result').innerText = isCorrect ? "⭕ 正解！" : "❌ 不正解...";
+        document.getElementById('result').style.color = isCorrect ? "#4CAF50" : "#F44336";
+        document.getElementById('answer-name').innerText = "正解は: " + currentQuiz.name;
+        document.getElementById('next-btn').style.display = "block";
+    }
+
+    init();
