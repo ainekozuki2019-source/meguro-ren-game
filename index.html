@@ -1,9 +1,46 @@
-// （中略：HTML/CSS部分は前回のものを引き継いでください。scriptタグ内を以下に差し替え）
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>目黒蓮ゲーム</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 20px; }
+        #game-container { background: white; max-width: 500px; margin: 0 auto; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #target-image { max-width: 100%; height: auto; border-radius: 10px; margin-bottom: 20px; }
+        #choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
+        
+        /* 選択肢のテキストリンク形式 */
+        .choice-link { color: #007AFF; text-decoration: underline; cursor: pointer; font-size: 18px; display: inline-block; }
+        
+        /* トラップ画像選択肢のスタイル（自動縮小でレイアウトを維持） */
+        .choice-img-trap { max-width: 80px; max-height: 80px; object-fit: cover; cursor: pointer; border: 2px solid #007AFF; vertical-align: middle; border-radius: 5px; }
+        
+        #result { margin-top: 20px; font-weight: bold; font-size: 24px; min-height: 40px; }
+        #answer-name { color: #e91e63; margin: 10px 0; font-size: 20px; }
+        button#next-btn { margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; display: none; background: #007AFF; color: white; border: none; border-radius: 5px; }
+        .loading { font-size: 18px; color: #666; }
+    </style>
+</head>
+<body>
 
-    const API_URL = https://script.google.com/macros/s/AKfycbySY0Te0BkfNC0ak-sneCwwrm4DJmBHZjAGFcMOzRwnb7v68Syuzmwpd1indUIfASYu8w/exec;
+<div id="game-container">
+    <h1>目黒蓮ゲーム</h1>
+    <div id="loading" class="loading">データを読み込み中...</div>
+    <img id="target-image" src="" alt="出題画像" style="display:none;">
+    <div id="choices"></div>
+    <div id="result"></div>
+    <div id="answer-name"></div>
+    <button id="next-btn" onclick="nextQuestion()">次の問題へ</button>
+</div>
+
+<script>
+    // GASのURLをセット済みです
+    const API_URL = "https://script.google.com/macros/s/AKfycbySY0Te0BkFNC0ak-sneCwwrm4DJmBHZjAGFcMOzRwnb7v68Syuzmwpd1indUlfASYu8w/exec";
     let quizData = [];
     let currentQuiz = null;
 
+    // データの読み込み
     async function init() {
         try {
             const response = await fetch(API_URL);
@@ -12,33 +49,31 @@
             document.getElementById('target-image').style.display = 'inline-block';
             nextQuestion();
         } catch (e) {
-            document.getElementById('loading').innerText = "エラー: 読み込み失敗";
+            document.getElementById('loading').innerText = "エラー: データの読み込みに失敗しました。スプシのデプロイ設定を「全員」にしているか確認してください。";
         }
     }
 
     function nextQuestion() {
+        // 表示のリセット
         document.getElementById('result').innerText = "";
         document.getElementById('answer-name').innerText = "";
         document.getElementById('next-btn').style.display = "none";
         document.getElementById('choices').innerHTML = "";
 
-        // 出題
+        // ランダムに出題
         currentQuiz = quizData[Math.floor(Math.random() * quizData.length)];
         document.getElementById('target-image').src = currentQuiz.image_url;
-
-        // 正解候補リスト（本名 + 別名）
-        const allCorrectAnswers = [currentQuiz.name, ...currentQuiz.aliases];
 
         // 選択肢作成 (6～8択)
         const choiceCount = Math.floor(Math.random() * 3) + 6; 
         let displayChoices = [];
 
-        // 1. まず本物の正解を1つ入れる
+        // 1. 本物の正解を1つ入れる
         displayChoices.push({ text: currentQuiz.name, isCorrect: true, isImage: false });
 
-        // 2. 正解の「別名」があれば、ランダムで1〜2個混ぜる（気持ち悪さ演出）
-        if (currentQuiz.aliases.length > 0) {
-            const extraCorrect = currentQuiz.aliases.sort(() => Math.random() - 0.5).slice(0, 2);
+        // 2. スプシにある「別名」も正解としてランダムに混ぜる（カオス演出）
+        if (currentQuiz.aliases && currentQuiz.aliases.length > 0) {
+            const extraCorrect = [...currentQuiz.aliases].sort(() => Math.random() - 0.5).slice(0, 2);
             extraCorrect.forEach(a => displayChoices.push({ text: a, isCorrect: true, isImage: false }));
         }
 
@@ -53,25 +88,26 @@
 
         // 4. 1つだけランダムに「画像トラップ」に変身させる
         const trapIndex = Math.floor(Math.random() * displayChoices.length);
-        if (Math.random() > 0.3) {
-            displayChoices[trapIndex].isImage = true;
-            // トラップが「正解」だった場合は自分の画像を、そうでなければ他人の画像を使う
-            displayChoices[trapIndex].imageUrl = displayChoices[trapIndex].isCorrect ? currentQuiz.image_url : displayChoices[trapIndex].trapUrl;
-        }
+        const shouldShowTrap = Math.random() > 0.3; // 70%の確率で発生
 
         // 順序をシャッフル
         displayChoices.sort(() => Math.random() - 0.5);
 
         // 描画
-        displayChoices.forEach(c => {
+        displayChoices.forEach((c, index) => {
             const el = document.createElement('div');
-            if (c.isImage) {
+            // この要素がトラップ対象かどうか
+            const isThisTrap = (shouldShowTrap && index === trapIndex);
+
+            if (isThisTrap) {
+                // 画像リンクのトラップ（出題画像自体も回答になっている演出）
                 const img = document.createElement('img');
-                img.src = c.imageUrl;
+                img.src = c.isCorrect ? currentQuiz.image_url : (c.trapUrl || currentQuiz.image_url);
                 img.className = "choice-img-trap";
                 img.onclick = () => checkAnswer(c.isCorrect);
                 el.appendChild(img);
             } else {
+                // 通常のテキストリンク
                 const span = document.createElement('span');
                 span.innerText = c.text;
                 span.className = "choice-link";
@@ -80,10 +116,15 @@
             }
             document.getElementById('choices').appendChild(el);
         });
+
+        // 出題画像自体もクリックで正解判定（仕様：回答リンクが埋められている）
+        document.getElementById('target-image').onclick = () => checkAnswer(true);
+        document.getElementById('target-image').style.cursor = "pointer";
     }
 
     function checkAnswer(isCorrect) {
-        if (document.getElementById('next-btn').style.display === "block") return;
+        if (document.getElementById('next-btn').style.display === "block") return; // 回答済みは無視
+
         document.getElementById('result').innerText = isCorrect ? "⭕ 正解！" : "❌ 不正解...";
         document.getElementById('result').style.color = isCorrect ? "#4CAF50" : "#F44336";
         document.getElementById('answer-name').innerText = "正解は: " + currentQuiz.name;
@@ -91,3 +132,7 @@
     }
 
     init();
+</script>
+
+</body>
+</html>
